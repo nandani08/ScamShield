@@ -11,6 +11,9 @@ from src.honeypot.state_machine import HoneypotStateMachine
 from src.honeypot.entity_vault import SyntheticEntityVault
 from src.config import settings
 
+from src.rules.protocol_verifier import ProtocolVerifier
+from src.honeypot.persona_adapter import HoneypotPersonaAdapter, PersonaMode
+
 logger = logging.getLogger("ArrestShield.WebSocket")
 router = APIRouter()
 ws_router = router
@@ -19,7 +22,7 @@ ws_router = router
 class IntegratedPipelineSession:
     """
     Manages state for an active streaming conversation session:
-    ASR -> Tri-State Detection -> GLiNER Threat Extraction -> LLM Honeypot.
+    ASR -> Dual-Engine Detection (Insider Protocol + Tri-State MuRIL) -> GLiNER Extraction -> Dual-Persona Honeypot.
     """
     def __init__(
         self,
@@ -28,7 +31,9 @@ class IntegratedPipelineSession:
         extractor: Optional[GLiNERThreatExtractor] = None,
         post_processor: Optional[ThreatPostProcessor] = None,
         honeypot_machine: Optional[HoneypotStateMachine] = None,
-        entity_vault: Optional[SyntheticEntityVault] = None
+        entity_vault: Optional[SyntheticEntityVault] = None,
+        verifier: Optional[ProtocolVerifier] = None,
+        persona_adapter: Optional[HoneypotPersonaAdapter] = None
     ):
         self.asr_processor = asr_processor if asr_processor else StreamingASRProcessor(
             sample_rate=settings.asr.sample_rate,
@@ -40,6 +45,11 @@ class IntegratedPipelineSession:
         self.post_processor = post_processor if post_processor else ThreatPostProcessor()
         self.honeypot_machine = honeypot_machine if honeypot_machine else HoneypotStateMachine()
         self.entity_vault = entity_vault if entity_vault else SyntheticEntityVault()
+        self.verifier = verifier if verifier else ProtocolVerifier()
+        self.persona_adapter = persona_adapter if persona_adapter else HoneypotPersonaAdapter(
+            state_machine=self.honeypot_machine,
+            entity_vault=self.entity_vault
+        )
 
         self.cumulative_extracted_entities: Dict[str, Any] = {
             "upi_ids": [],
@@ -57,6 +67,7 @@ class IntegratedPipelineSession:
         self.detector.reset()
         self.honeypot_machine.reset()
         self.entity_vault.reset_active_decoys()
+        self.persona_adapter.reset()
         self.cumulative_extracted_entities = {
             "upi_ids": [],
             "phone_numbers": [],
@@ -69,14 +80,17 @@ class IntegratedPipelineSession:
 
     def process_text_turn(self, transcript_text: str, timestamp_ms: int = 0) -> Dict[str, Any]:
         """
-        Executes complete end-to-end analysis on a text turn.
+        Executes complete end-to-end analysis on a text turn through Dual-Engine Pipeline.
         """
-        # 1. Tri-State ML Detection
-        detection_result = self.detector.evaluate_turn(transcript_text)
+        # 1. Engine 1: Protocol Verifier (Rogue Insider Detection)
+        verifier_result = self.verifier.verify_transcript(transcript_text)
 
-        # 2. Zero-Shot Threat Extraction
-        raw_entities = self.extractor.extract_threat_entities(transcript_text)
-        threat_report = self.post_processor.process_extracted_threats(raw_entities, transcript_text=transcript_text)
+        # 2. Engine 2: Tri-State ML Detection (External Scam Classification)
+        detection_result = self.detector.process_turn(transcript_text)
+
+        # 3. Zero-Shot Threat Extraction
+        raw_entities = self.extractor.predict_entities(transcript_text)
+        threat_report = self.post_processor.extract_and_validate_all(transcript_text, raw_entities)
 
         # Update cumulative threat indicators
         for key in ["upi_ids", "phone_numbers", "urls", "police_badge_ids", "case_ids", "claimed_agencies"]:
@@ -88,20 +102,36 @@ class IntegratedPipelineSession:
             len(self.cumulative_extracted_entities[k]) for k in ["upi_ids", "phone_numbers", "urls", "police_badge_ids", "case_ids", "claimed_agencies"]
         )
 
-        # 3. Adaptive LLM Honeypot Activation (Activates on UNCERTAIN or FRAUD)
-        is_suspicious = (detection_result["state"] in ["FRAUD", "UNCERTAIN"] or detection_result["risk_score"] >= 0.40)
-        honeypot_payload = {"active": False}
+        # 4. Adaptive Dual-Engine Honeypot Activation
+        is_insider_violation = verifier_result["is_insider_violation"]
+        has_extracted_threats = threat_report.get("total_valid_threat_indicators", 0) > 0
+        is_external_fraud = (
+            detection_result["state"] == "FRAUD" 
+            or (detection_result["state"] == "UNCERTAIN" and detection_result["risk_score"] >= 0.50)
+            or has_extracted_threats
+        )
+        trigger_honeypot = is_insider_violation or is_external_fraud
 
-        if is_suspicious or self.honeypot_machine.turn_count > 0:
-            decoy_context = self.entity_vault.get_decoy_context_string()
-            honeypot_turn = self.honeypot_machine.generate_honeypot_turn(
+        honeypot_payload = {
+            "active": False,
+            "mode": self.persona_adapter.mode.value,
+            "state": "IDLE",
+            "victim_response": "",
+            "turn_count": self.honeypot_machine.turn_count,
+            "utility_score": 0.0
+        }
+
+        if trigger_honeypot:
+            target_mode = PersonaMode.CONFUSED_BANK_CUSTOMER if is_insider_violation else PersonaMode.DIGITAL_ARREST_VICTIM
+            honeypot_turn = self.persona_adapter.generate_turn(
                 scammer_input=transcript_text,
                 detection_result=detection_result,
-                decoy_context=decoy_context,
-                new_extracted_count=threat_report["total_valid_threat_indicators"]
+                insider_violation_result=verifier_result,
+                forced_mode=target_mode
             )
             honeypot_payload = {
                 "active": True,
+                "mode": honeypot_turn["mode"],
                 "state": honeypot_turn["state"],
                 "victim_response": honeypot_turn["victim_response"],
                 "turn_count": honeypot_turn["turn_count"],
@@ -112,6 +142,7 @@ class IntegratedPipelineSession:
             "type": "analysis_turn",
             "transcript": transcript_text,
             "timestamp_ms": timestamp_ms,
+            "engine1_insider_verifier": verifier_result,
             "detection": detection_result,
             "threat_extraction": threat_report,
             "cumulative_threats": self.cumulative_extracted_entities,

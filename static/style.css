@@ -474,3 +474,14 @@ header {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+
+/* Threat Origin & Classification Card */
+.origin-card {
+    transition: all 0.3s ease;
+}
+
+#insiderRulesList li {
+    line-height: 1.4;
+    word-break: break-word;
+}
+

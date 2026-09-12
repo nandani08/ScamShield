@@ -69,11 +69,17 @@ class SyntheticEntityVault:
         self.intercept_log: List[Dict[str, str]] = []
 
     def reset_active_decoys(self):
-        """Randomly rotates active synthetic decoy credentials."""
+        """Resets active synthetic decoys to fresh randomized credentials."""
         self.active_bank_account = random.choice(DECOY_BANK_ACCOUNTS)
         self.active_upi = random.choice(DECOY_UPI_IDS)
         self.active_name = random.choice(DECOY_NAMES)
+        self.active_address = DECOY_ADDRESS
         self.intercept_log.clear()
+        logger.info(f"Reset active synthetic vault decoys: {self.active_name} | {self.active_bank_account['bank_name']} | {self.active_upi}")
+
+    def reset(self):
+        """Alias for reset_active_decoys."""
+        self.reset_active_decoys()
 
     def get_decoy_credentials(self) -> Dict[str, Any]:
         """

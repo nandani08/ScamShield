@@ -119,6 +119,10 @@ class GLiNERThreatExtractor:
         else:
             self.model = DummyThreatExtractor(labels=self.labels)
 
+    def predict_entities(self, text: str, labels: Optional[List[str]] = None, threshold: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Alias for extract_threat_entities."""
+        return self.extract_threat_entities(text, threshold=threshold)
+
     def extract_threat_entities(self, text: str, threshold: Optional[float] = None) -> List[Dict[str, Any]]:
         """
         Extracts zero-shot threat entities from transcript text.

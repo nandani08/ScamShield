@@ -95,8 +95,30 @@ async def analyze_text_endpoint(payload: TextAnalysisRequest) -> Dict[str, Any]:
     REST endpoint to analyze a dialogue text turn through the integrated pipeline:
     Tri-State Detection -> GLiNER Threat Extraction -> Adaptive LLM Honeypot.
     """
-    if payload.reset_session:
+    if payload.reset_session or (payload.text and payload.text.strip().lower() == "reset"):
         shared_api_session.reset()
+        if not payload.text or payload.text.strip().lower() == "reset":
+            return {
+                "status": "reset",
+                "message": "Session reset successfully.",
+                "detection": {
+                    "state": "SAFE",
+                    "risk_score": 0.0,
+                    "prob_scam": 0.0,
+                    "triggers": {"authority": 0.0, "urgency": 0.0, "isolation": 0.0, "payment_pressure": 0.0},
+                    "predicted_stage": "monitoring",
+                    "stage_id": 0,
+                    "turns_in_window": 0
+                },
+                "honeypot": {
+                    "active": False,
+                    "mode": "digital_arrest_victim",
+                    "state": "IDLE",
+                    "victim_response": "",
+                    "turn_count": 0,
+                    "utility_score": 0.0
+                }
+            }
 
     if not payload.text or not payload.text.strip():
         raise HTTPException(status_code=400, detail="Text field cannot be empty.")

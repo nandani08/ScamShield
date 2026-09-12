@@ -131,8 +131,9 @@ class TestWebSocketHandler(unittest.TestCase):
             dummy_pcm = (np.zeros(1024, dtype=np.int16)).tobytes()
             websocket.send_bytes(dummy_pcm)
             response = websocket.receive_json()
-            self.assertEqual(response["type"], "transcript")
-            self.assertEqual(response["text"], "Call CBI officer immediately")
+            self.assertIn(response["type"], ["analysis_turn", "transcript"])
+            transcript_text = response.get("transcript", response.get("text", ""))
+            self.assertEqual(transcript_text, "Call CBI officer immediately")
 
 
 if __name__ == "__main__":

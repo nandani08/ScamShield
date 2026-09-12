@@ -140,7 +140,7 @@ function renderAnalysisTurn(data) {
     }
 
     // 3. Render Honeypot Victim Response
-    if (data.honeypot && (data.honeypot.active || data.honeypot.victim_response)) {
+    if (data.honeypot && data.honeypot.active && data.honeypot.victim_response) {
         const state = (data.honeypot.state || 'ACTIVE').toUpperCase();
         honeypotStatePill.innerText = state;
         honeypotStatePill.className = `state-pill state-fraud`;
@@ -149,10 +149,11 @@ function renderAnalysisTurn(data) {
             honeypotUtilityScore.innerText = `Utility Score: ${data.honeypot.utility_score.toFixed(1)}`;
         }
 
-        if (data.honeypot.victim_response) {
-            appendChatBubble('VICTIM PERSONA (HONEYPOT)', data.honeypot.victim_response, 'chat-victim');
-            speakTextAloud(data.honeypot.victim_response);
-        }
+        appendChatBubble('VICTIM PERSONA (HONEYPOT)', data.honeypot.victim_response, 'chat-victim');
+        speakTextAloud(data.honeypot.victim_response);
+    } else {
+        honeypotStatePill.innerText = 'IDLE';
+        honeypotStatePill.className = 'state-pill state-safe';
     }
 
     // 4. Render Extracted Threats
@@ -360,6 +361,21 @@ async function resetSession() {
     honeypotStatePill.className = 'state-pill state-safe';
     honeypotUtilityScore.innerText = 'Utility Score: 0.0';
 
+    // Reset all 4 psychological trigger meters to 0%
+    updateTriggerMeter(trigAuthorityVal, trigAuthorityBar, 0);
+    updateTriggerMeter(trigUrgencyVal, trigUrgencyBar, 0);
+    updateTriggerMeter(trigIsolationVal, trigIsolationBar, 0);
+    updateTriggerMeter(trigPaymentVal, trigPaymentBar, 0);
+
+    // Send reset command to REST endpoint as well
+    try {
+        await fetch('/api/analyze_text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'reset', reset_session: true })
+        });
+    } catch(e) {}
+
     threatGrid.innerHTML = `
         <div class="threat-card">
             <span class="threat-type">Status</span>
@@ -410,8 +426,13 @@ async function simulatePreset(presetType) {
         window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
     }
 
+    // Reset session buffers so each preset simulation starts fresh without prior turn accumulation
+    await resetSession();
+
     let scenarioText = "";
-    if (presetType === 'arrest') {
+    if (presetType === 'insider') {
+        scenarioText = "Main Branch Manager speaking from State Bank of India. Account suspension se bachane ke liye urgent OTP share karo.";
+    } else if (presetType === 'arrest') {
         scenarioText = "Main Mumbai Police Cyber Cell se Officer Sharma speak kar raha hu (Badge #MH-4912). Case #CR-2024-8842 register hua hai. Urgent Payment UPI rbi.verify@okicici par transfer karo or call 9876543210 immediately.";
     } else if (presetType === 'upi') {
         scenarioText = "Aapka TRAI mobile number disconnect ho jayega. Immediate penalty clearance pay karo UPI cbi.clearance@paytm par.";

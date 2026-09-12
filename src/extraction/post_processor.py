@@ -137,6 +137,14 @@ class ThreatPostProcessor:
 
         return None
 
+    def extract_and_validate_all(
+        self,
+        transcript_text: str = "",
+        raw_entities: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """Alias for process_extracted_threats."""
+        return self.process_extracted_threats(raw_entities=raw_entities or [], transcript_text=transcript_text)
+
     def process_extracted_threats(
         self,
         raw_entities: List[Dict[str, Any]],

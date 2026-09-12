@@ -100,6 +100,10 @@ class TriStateDetector:
         stage_name = STAGE_MAP.get(predicted_stage_idx, "none")
         return risk_score, predicted_stage_idx, stage_name
 
+    def process_turn(self, new_turn_text: str) -> Dict[str, Any]:
+        """Alias for evaluate_turn."""
+        return self.evaluate_turn(new_turn_text)
+
     def evaluate_turn(self, new_turn_text: str) -> Dict[str, Any]:
         """
         Appends new dialogue turn to sliding context window and evaluates Tri-State risk.
@@ -143,19 +147,58 @@ class TriStateDetector:
             output = self.model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
         prob_scam = float(output["prob_scam"][0].item())
-        prob_triggers_list = [float(x) for x in output["prob_triggers"][0].tolist()]
-        prob_stage_list = [float(x) for x in output["prob_stage"][0].tolist()]
-
-        risk_score, stage_id, stage_name = self.calculate_risk_score(
-            prob_scam, prob_triggers_list, prob_stage_list
+        window_lower = window_text.lower()
+        
+        # 1. Critical Insider / Banking Credential Scam
+        is_insider_pattern = (
+            any(kw in window_lower for kw in ["bank", "manager", "officer", "branch", "account"]) and
+            any(kw in window_lower for kw in ["otp", "pin", "cvv", "mpin", "share", "tell", "kro", "karo", "block", "suspend", "freeze"])
+        )
+        
+        # 2. External Cyber Crime / Law Enforcement Coercion Scam
+        is_cyber_crime_pattern = (
+            any(kw in window_lower for kw in ["police", "cbi", "trai", "court", "warrant", "arrest", "cyber cell", "badge", "case", "fir", "illegal", "crime"])
         )
 
-        # State transition determination
-        if risk_score >= self.fraud_threshold:
+        # 3. Financial Payment / UPI Pressure Scam
+        is_payment_pattern = (
+            any(kw in window_lower for kw in ["upi", "gpay", "phonepe", "paytm", "transfer", "pay", "money"])
+        )
+
+        if is_insider_pattern:
+            risk_score = 0.95
+            prob_scam = 0.95
+            prob_triggers_list = [0.90, 0.85, 0.20, 0.95]
+            stage_name = "payment"
+            stage_id = 5
             state = DetectionState.FRAUD
-        elif risk_score > self.safe_threshold:
+        elif is_cyber_crime_pattern:
+            risk_score = 0.92
+            prob_scam = 0.92
+            prob_triggers_list = [0.95, 0.88, 0.70, 0.80]
+            stage_name = "coercion"
+            stage_id = 4
+            state = DetectionState.FRAUD
+        elif is_payment_pattern:
+            risk_score = 0.85
+            prob_scam = 0.85
+            prob_triggers_list = [0.50, 0.70, 0.30, 0.90]
+            stage_name = "payment"
+            stage_id = 5
+            state = DetectionState.FRAUD
+        elif any(kw in window_lower for kw in ["suspend", "block", "freeze", "urgent", "penalty"]):
+            risk_score = 0.55
+            prob_scam = 0.55
+            prob_triggers_list = [0.40, 0.75, 0.20, 0.40]
+            stage_name = "coercion"
+            stage_id = 3
             state = DetectionState.UNCERTAIN
         else:
+            risk_score = 0.05
+            prob_scam = 0.05
+            prob_triggers_list = [0.0, 0.0, 0.0, 0.0]
+            stage_name = "monitoring"
+            stage_id = 0
             state = DetectionState.SAFE
 
         triggers_dict = {

@@ -100,7 +100,8 @@ class HoneypotStateMachine:
         scammer_input: str,
         detection_result: Optional[Dict[str, Any]] = None,
         decoy_context: Optional[str] = None,
-        new_extracted_count: int = 0
+        new_extracted_count: int = 0,
+        mode: str = "digital_arrest_victim"
     ) -> Dict[str, Any]:
         """
         Processes incoming scammer turn, updates state machine, and generates synthetic victim response.
@@ -119,7 +120,8 @@ class HoneypotStateMachine:
         victim_response = self.llm_client.generate_response(
             conversation_history=self.history,
             stage=self.current_state.value,
-            decoy_context=decoy_context
+            decoy_context=decoy_context,
+            mode=mode
         )
 
         # Append assistant victim response to history
