@@ -5,7 +5,6 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-1.0.0-009688.svg)](https://fastapi.tiangolo.com/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **ArrestShield-Live** is an end-to-end, multi-stage defense system engineered to detect, intercept, and neutralize **Digital Arrest & Financial Coercion Scams** (impersonating Indian Law Enforcement agencies such as Mumbai Police, CBI, ED, TRAI, and Supreme Court) in real-time.
 
