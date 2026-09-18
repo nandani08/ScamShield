@@ -28,16 +28,18 @@ graph TD
     A["🎙️ User Audio Input / Microphone Stream"] --> B["ASR Engine (Silero VAD + Whisper)"]
     B --> C["Incremental Text Transcript"]
     C --> D["⚡ Tri-State ML Engine (MuRIL Classifier)"]
-    C --> E["🕵️ Zero-Shot Extractor (GLiNER + Post-Processor)"]
     
     D --> F{"Scam Risk State"}
-    F -->|"SAFE / UNCERTAIN"| G["Monitor Stream"]
-    F -->|"FRAUD"| H["🤖 Adaptive LLM Honeypot Engine"]
+    F -->|"SAFE / UNCERTAIN"| G["Continuous Monitoring Buffer"]
     
-    E --> I["Threat Indicators (UPI, Phone, Badges, URLs)"]
+    F -->|"FRAUD"| H["🤖 Adaptive LLM Honeypot Engine"]
+    F -->|"FRAUD Triggered"| E["🕵️ Zero-Shot Extractor (GLiNER + Regex)"]
     
     H --> J["🔐 Synthetic Entity Vault (Decoy Data Swap)"]
     J --> K["Victim Persona Response (Ramesh Gupta)"]
+    K -.->|"Scammer Replies"| E
+    
+    E --> I["Actionable Threat Indicators (UPI, Phone, Badges, URLs)"]
     
     G --> L["📊 Glassmorphic Web Dashboard"]
     I --> L
